@@ -1,0 +1,241 @@
+---
+title: "EDA Assignment"
+author: "Marcus Needham"
+date: "2024-02-22"
+output: 
+  html_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message= F, warning = F)
+```
+
+## Introduction
+
+Home Credit, a leading financial inclusion provider, utilizes alternative data like telco and transactional information to predict repayment abilities for clients lacking traditional credit histories. Seeking to optimize their predictive models, we are striving to unlock the full potential of their data. By refining loan approval processes and terms, this will help ensure deserving clients access credit while minimizing financial risk.
+
+## Data Description & Missing Data
+
+There is a lot of data available for this project, the focus of this assignment will be the application_test and application_train data. This will be the data used in the modeling process, we want to make sure that we are using the correct variables and finding the strongest correlations to maximize the efficiency of the model. Columns with more than 50% missing values will be removed. The remaining missing values will be replaced with mean values.
+
+## EDA Preparation
+
+```{r}
+# Library Import
+library(tidyverse)
+library(dplyr)
+library(skimr)
+library(janitor)
+
+# Data Import
+train <- read.csv("application_train.csv")
+test <- read.csv("previous_application.csv")
+
+# Factoring Categorical and Binary Variables
+train <- train %>% 
+  mutate(TARGET = factor(TARGET),
+         NAME_CONTRACT_TYPE = factor(NAME_CONTRACT_TYPE),
+         CODE_GENDER = factor(CODE_GENDER),
+         FLAG_OWN_CAR = factor(FLAG_OWN_CAR),
+         FLAG_OWN_REALTY = factor(FLAG_OWN_REALTY),
+         CNT_CHILDREN = factor(CNT_CHILDREN),
+         NAME_TYPE_SUITE = factor(NAME_TYPE_SUITE),
+         NAME_INCOME_TYPE = factor(NAME_INCOME_TYPE),
+         NAME_EDUCATION_TYPE = factor(NAME_EDUCATION_TYPE),
+         NAME_FAMILY_STATUS = factor(NAME_FAMILY_STATUS),
+         NAME_HOUSING_TYPE = factor(NAME_HOUSING_TYPE),
+         FLAG_MOBIL = factor(FLAG_MOBIL),
+         FLAG_EMP_PHONE = factor(FLAG_MOBIL),
+         FLAG_WORK_PHONE = factor(FLAG_WORK_PHONE),
+         FLAG_CONT_MOBILE = factor(FLAG_CONT_MOBILE),
+         FLAG_PHONE = factor(FLAG_PHONE),
+         FLAG_EMAIL = factor(FLAG_EMAIL),
+         OCCUPATION_TYPE = factor(OCCUPATION_TYPE),
+         CNT_FAM_MEMBERS = factor(CNT_FAM_MEMBERS),
+         REGION_RATING_CLIENT = factor(REGION_RATING_CLIENT),
+         REGION_RATING_CLIENT_W_CITY = factor(REGION_RATING_CLIENT_W_CITY),
+         WEEKDAY_APPR_PROCESS_START = factor(WEEKDAY_APPR_PROCESS_START),
+         HOUR_APPR_PROCESS_START = factor(HOUR_APPR_PROCESS_START),
+         REG_REGION_NOT_LIVE_REGION = factor(REG_REGION_NOT_LIVE_REGION),
+         REG_REGION_NOT_WORK_REGION = factor(REG_REGION_NOT_WORK_REGION),
+         REG_CITY_NOT_LIVE_CITY = factor(REG_CITY_NOT_LIVE_CITY),
+         REG_CITY_NOT_WORK_CITY = factor(REG_CITY_NOT_WORK_CITY),
+         LIVE_CITY_NOT_WORK_CITY = factor(LIVE_CITY_NOT_WORK_CITY),
+         LIVE_REGION_NOT_WORK_REGION = factor(LIVE_REGION_NOT_WORK_REGION),
+         ORGANIZATION_TYPE = factor(ORGANIZATION_TYPE))
+```
+
+## Exploring the Target Variable
+
+```{r}
+# Information on the Target Variable
+str(train$TARGET)
+summary(train$TARGET)
+
+# Creating a Visualization of the Target Variable
+ggplot(train, aes(x = TARGET)) +
+  geom_bar() +
+  labs(title = "Target Variable Distribution")
+```
+
+```{r}
+# Determine if Target is Unbalanced
+table(train$TARGET)
+
+# Determine Accuracy for Majority Class Classifier
+major <- 282686
+nonmajor <- 24825
+
+majorityclassaccuracy <- major / (major + nonmajor)
+majorityclassaccuracy
+```
+
+## Exploring Relationship between Target and Predictors
+
+```{r}
+# Income vs Target
+ggplot(train, aes(x = AMT_INCOME_TOTAL, y = TARGET)) + 
+  geom_boxplot() +
+  labs(title = "Income vs Risk of Default")
+
+# Income vs Education
+ggplot(train, aes(x = NAME_EDUCATION_TYPE, fill = TARGET)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  labs(title = "Education vs Risk of Default")
+
+# Income vs Family Status
+ggplot(train, aes(x = NAME_FAMILY_STATUS, fill = TARGET)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  labs(title = "Family Status vs Risk of Default")
+```
+
+```{r}
+# Average Income vs Risk of Default
+train %>%
+  group_by(TARGET) %>%
+  summarise(avg_income = mean(AMT_INCOME_TOTAL, na.rm = TRUE))
+```
+
+## Exploring the Scope of Missing Data
+
+```{r}
+# Using Skimr
+skim_summary <- skim(train)
+skim_summary
+```
+
+```{r}
+# Removing NA's with more than 50% of their values missing
+threshold <- 0.5 
+
+# Calculate the percentage of missing values in each column
+missing_percentage <- colSums(is.na(train)) / nrow(train)
+
+# Select columns with missing values below the threshold
+columns_to_keep <- names(missing_percentage[missing_percentage <= threshold])
+
+# Keep only selected columns
+train_clean <- train %>%
+  select(all_of(columns_to_keep))
+
+# Replacing Remaining NA's with Mean Values
+train_clean <- train_clean %>%
+  mutate(across(everything(), ~ifelse(is.na(.), mean(., na.rm = TRUE), .)))
+
+# Make sure the NA's Removed
+skim(train_clean)
+
+```
+
+# Examing Data Integrity
+
+```{r}
+# summary(train_clean)
+
+# Remove Outliers
+train_filtered <- train_clean %>%
+  filter(AMT_INCOME_TOTAL <= 500000,
+         DAYS_EMPLOYED <= 30000)
+
+summary(train_filtered)
+```
+
+
+## Checking for Variance
+
+```{r}
+# Assuming train_data is your data frame
+# Specify the threshold for minimum variance (adjust as needed)
+variance_threshold <- 0.01  # Example threshold, adjust accordingly
+
+# Calculate the variance for each column
+variances <- apply(train_clean, 2, var)
+
+# Identify columns with variance below the threshold
+low_variance_columns <- names(variances[variances < variance_threshold])
+
+# Remove NAs from low_variance_columns
+low_variance_columns <- low_variance_columns[!is.na(low_variance_columns)]
+
+# Remove low variance columns if there are any
+if (length(low_variance_columns) > 0) {
+  train_data_high_variance <- train_clean %>%
+    select(-all_of(low_variance_columns))
+  
+  # Check the dimensions of the data after removing low variance columns
+  dim(train_data_high_variance)
+} else {
+  # If there are no low variance columns, just use the original data
+  train_data_high_variance <- train_clean
+  dim(train_data_high_variance)
+}
+
+```
+## Joining Data 
+
+```{r}
+# Load in data
+bureau <- read.csv("bureau.csv")
+
+
+# Join the Data
+bureau_train <- left_join(train_clean, bureau, by = "SK_ID_CURR")
+
+# Check the dimensions of the joined data
+dim(bureau_train)
+
+```
+
+```{r}
+# Viewing Joined Data Relationships
+# Income vs Target
+ggplot(bureau_train, aes(x = AMT_CREDIT_SUM, y = TARGET)) + 
+  geom_boxplot() +
+  labs(title = "Income vs Risk of Default")
+
+# Income vs Education
+ggplot(bureau_train, aes(x = CREDIT_TYPE, fill = TARGET)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  labs(title = "Education vs Risk of Default")
+
+# Income vs Family Status
+ggplot(bureau_train, aes(x = CREDIT_ACTIVE, fill = TARGET)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  labs(title = "Active Credit vs Risk of Default")
+```
+
+## Findings 
+
+This EDA gave the following findings:
+
+The target variable is unbalanced, with a majority class representing clients who repaid their loans (282,686 instances) and a minority class representing clients who defaulted on their loans (24,825 instances). The accuracy of a majority class classifier, which always predicts the majority class, is approximately 91.9%.
+
+There also appears to be a relationship between income and the risk of default. Clients with higher incomes tend to have a lower risk of default.Education and family status also seem to influence the risk of default. For example, clients with higher education levels or certain family statuses may have a lower risk of default.
+
+These are just a few of the takeaways that will be used going into the modeling stage of the project. 
+
